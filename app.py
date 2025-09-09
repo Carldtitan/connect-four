@@ -22,21 +22,6 @@ st.markdown("""
     <style>
     .legend { color: #6b7280; }
     .ctrl { margin-top: .25rem }
-    .hitrow button {
-  background: transparent !important;
-  border: 0 !important;
-  height: 34px !important;      /* thin bar */
-  width: 100% !important;
-  font-size: 20px !important;   /* for the arrow */
-  line-height: 1 !important;
-  box-shadow: none !important;
-}
-.hitrow button:hover {
-  background: rgba(255,255,255,0.08) !important;
-  border-radius: 8px !important;
-  cursor: pointer;
-}
-
     </style>
 """, unsafe_allow_html=True)
 
