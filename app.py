@@ -7,112 +7,104 @@ from ai import ConnectFourAI
 st.set_page_config(page_title="Connect Four", page_icon="🎮", layout="centered")
 
 # ------------------- STYLE -------------------
-BOARD_BLUE = "#1557d5"      # classic board blue
+BOARD_BLUE = "#1557d5"
 HOLE_COLOR = "#ffffff"
 EDGE_COLOR = "#000000"
-RED = "#e11d48"             # red disc
-YELLOW = "#facc15"          # yellow disc
+RED = "#e11d48"
+YELLOW = "#facc15"
 BG = "#e5e7eb"
 
-CELL = 86                   # px for each cell
-PADDING = 14                # padding inside each cell for hole
+CELL = 86
+PADDING = 14
 STROKE = 3
 
 st.markdown("""
-    <style>
-    .legend { color: #6b7280; }
-    .ctrl { margin-top: .25rem }
-    </style>
-""", unsafe_allow_html=True)
+<style>
+.legend { color: #6b7280; }
+.ctrl { margin-top: .25rem }
 
+/* slim, unlabeled buttons that align with the columns */
+.hitrow button {
+  background: transparent !important;
+  border: 0 !important;
+  height: 34px !important;
+  width: 100% !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  font-size: 20px !important;
+  line-height: 1 !important;
+  box-shadow: none !important;
+  cursor: pointer;
+}
+.hitrow button:hover {
+  background: rgba(255,255,255,0.08) !important;
+  border-radius: 8px !important;
+}
+</style>
+""", unsafe_allow_html=True)
 
 # ------------------- HELPERS -------------------
 def render_svg(board, falling=None):
-    """
-    Draw the board as an SVG like tkinter:
-    - blue rectangle with circular holes (white)
-    - tokens with black stroke
-    - optional falling=(row, col, player) draws a token overlay
-    """
     rows = len(board)
     cols = len(board[0]) if rows else 0
     width = cols * CELL
     height = rows * CELL
 
-    def hole_cx(c): return c * CELL + CELL // 2
-    def hole_cy(r): return r * CELL + CELL // 2
+    def cx(c): return c * CELL + CELL // 2
+    def cy(r): return r * CELL + CELL // 2
     radius = (CELL // 2) - PADDING
 
-    # Start SVG
     parts = [
         f'<svg width="100%" viewBox="0 0 {width} {height}" '
         f'preserveAspectRatio="xMidYMid meet" '
         f'xmlns="http://www.w3.org/2000/svg" style="background:{BG};">'
     ]
+    parts.append(f'<rect x="0" y="0" width="{width}" height="{height}" fill="{BOARD_BLUE}" />')
 
-    # Board background
-    parts.append(
-        f'<rect x="0" y="0" width="{width}" height="{height}" fill="{BOARD_BLUE}" />'
-    )
-
-    # Holes (drawn as white circles to simulate cut-outs)
+    # holes
     for r in range(rows):
         for c in range(cols):
             parts.append(
-                f'<circle cx="{hole_cx(c)}" cy="{hole_cy(r)}" r="{radius}" '
+                f'<circle cx="{cx(c)}" cy="{cy(r)}" r="{radius}" '
                 f'fill="{HOLE_COLOR}" stroke="{EDGE_COLOR}" stroke-width="{STROKE}" />'
             )
 
-    # Tokens
+    # tokens
     for r in range(rows):
         for c in range(cols):
             v = board[r][c]
-            if v == 0:
-                continue
+            if v == 0: continue
             fill = RED if v == 1 else YELLOW
             parts.append(
-                f'<circle cx="{hole_cx(c)}" cy="{hole_cy(r)}" r="{radius}" '
+                f'<circle cx="{cx(c)}" cy="{cy(r)}" r="{radius}" '
                 f'fill="{fill}" stroke="{EDGE_COLOR}" stroke-width="{STROKE}" />'
             )
 
-    # Falling overlay (drawn last so it appears on top)
+    # falling overlay
     if falling is not None:
         fr, fc, p = falling
         fill = RED if p == 1 else YELLOW
         parts.append(
-            f'<circle cx="{hole_cx(fc)}" cy="{hole_cy(fr)}" r="{radius}" '
+            f'<circle cx="{cx(fc)}" cy="{cy(fr)}" r="{radius}" '
             f'fill="{fill}" stroke="{EDGE_COLOR}" stroke-width="{STROKE}" />'
         )
 
     parts.append('</svg>')
     return "".join(parts)
 
-
 def next_empty_row(board, col):
-    """Return the row index where a token would land in this column, or None if full."""
     for r in range(len(board) - 1, -1, -1):
         if board[r][col] == 0:
             return r
     return None
 
-
 def animate_drop(container, game, col, player, delay=0.055):
-    """
-    Show a simple falling animation by redrawing the board with an overlay token
-    moving down the target column until the landing row.
-    We only modify the true board state at the end (by calling game.make_move).
-    """
     target_row = next_empty_row(game.board, col)
     if target_row is None:
         return False
-
-    # Start above the board (visual nicely)
     for r in range(0, target_row + 1):
-        svg = render_svg(game.board, falling=(r, col, player))
-        container.markdown(svg, unsafe_allow_html=True)
+        container.markdown(render_svg(game.board, falling=(r, col, player)), unsafe_allow_html=True)
         time.sleep(delay)
-
-    # Commit the real move
     game.make_move(col, player)
     container.markdown(render_svg(game.board), unsafe_allow_html=True)
     return True
@@ -131,79 +123,65 @@ st.session_state.ai.set_player_number(AI_PLAYER)
 g = st.session_state.game
 ai = st.session_state.ai
 
-
-
 st.title("Connect Four")
 
 # Controls
-c1, c2, c3 = st.columns([1,1,2])
+c1, c2, _ = st.columns([1,1,2])
 with c1:
     ai_starts = st.toggle("AI starts", value=False)
 with c2:
     if st.button("Restart Game", help="Start a fresh game", use_container_width=True):
-        # reset objects
         st.session_state.game = ConnectFour()
         st.session_state.ai   = ConnectFourAI(st.session_state.game)
+        st.session_state.ai.set_player_number(AI_PLAYER)  # lock colors
 
-        # lock colors again
-        st.session_state.ai.set_player_number(AI_PLAYER)
-
-        # set who goes first (no color swap)
         if ai_starts:
-            # AI (Yellow, player 2) starts
+            # AI (Yellow) starts
             st.session_state.game.current_player = AI_PLAYER
-            # AI opening move with animation
             board_placeholder = st.empty()
-            board_placeholder.markdown(
-                render_svg(st.session_state.game.board), unsafe_allow_html=True
-            )
+            board_placeholder.markdown(render_svg(st.session_state.game.board), unsafe_allow_html=True)
             ai_col = st.session_state.ai.get_best_move()
             animate_drop(board_placeholder, st.session_state.game, ai_col, AI_PLAYER)
-            # make_move toggles turn to Human automatically
         else:
-            # Human (Red, player 1) starts
+            # Human (Red) starts
             st.session_state.game.current_player = HUMAN
-
         st.rerun()
 
-
-# Whose turn
+# Turn label
 winner = g.check_winner()
 if winner is None and not g.is_board_full():
-    turn = "🔴 Human" if g.current_player == HUMAN else "🟡 AI"
-    st.write(f"**Turn:** {turn}")
+    st.write(f"**Turn:** {'🔴 Human' if g.current_player == HUMAN else '🟡 AI'}")
 
+# ---------- TOP ROW OF UNLABELED BUTTONS (aligned to columns) ----------
+clicked_col = None
+hit_row = st.columns(g.COLS, gap="small")
+for c in range(g.COLS):
+    with hit_row[c]:
+        st.markdown('<div class="hitrow">', unsafe_allow_html=True)
+        disabled = (g.check_winner() is not None) or g.is_board_full() \
+                   or (not g.is_valid_move(c)) or (g.current_player != HUMAN)
+        if st.button("↓", key=f"hit-{c}", disabled=disabled):
+            clicked_col = c
+        st.markdown('</div>', unsafe_allow_html=True)
 
-# Board placeholder (used for animation)
+# Board (SVG)
 board_area = st.empty()
 board_area.markdown(render_svg(g.board), unsafe_allow_html=True)
 
-st.divider()
-st.write("Drop a piece:")
-drop = st.columns(g.COLS, gap="small")
+# Handle a click
+if clicked_col is not None:
+    if animate_drop(board_area, g, clicked_col, HUMAN):
+        if g.check_winner() is None and not g.is_board_full():
+            ai_col = ai.get_best_move()
+            animate_drop(board_area, g, ai_col, AI_PLAYER)
+    st.rerun()
 
-# ------------------- GAMEPLAY -------------------
+# End-state messages
+winner = g.check_winner()
 if winner is not None:
-    if ai.AI != winner:
-        st.success("You win! 🎉")
-        st.balloons()
-    else:
-        st.error("AI wins! 🤖")
+    st.success("You win! 🎉") if winner != AI_PLAYER else st.error("AI wins! 🤖")
 elif g.is_board_full():
     st.info("It’s a tie.")
-else:
-    for c in range(g.COLS):
-        with drop[c]:
-            disabled = (not g.is_valid_move(c)) or (g.current_player != HUMAN)
-            if st.button(f"↓ {c+1}", key=f"drop-{c}", disabled=disabled):
-                # Human (Red) move
-                if animate_drop(board_area, g, c, HUMAN):
-                    # AI (Yellow) replies if game not over
-                    if g.check_winner() is None and not g.is_board_full():
-                        ai_col = ai.get_best_move()
-                        animate_drop(board_area, g, ai_col, AI_PLAYER)
-                st.rerun()
 
-
-st.markdown("<p class='legend'>Red = Human, Yellow = AI. Click a column to drop a piece.</p>",
+st.markdown("<p class='legend'>Click a column to drop a piece. Red = Human, Yellow = AI.</p>",
             unsafe_allow_html=True)
