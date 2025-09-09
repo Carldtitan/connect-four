@@ -16,11 +16,9 @@ class ConnectFour:
         self.current_player = 1
         
     def is_valid_move(self, col: int) -> bool:
-        """
-        Check if a move is valid in the given column
-        Returns True if the top cell in column is empty
-        """
-        return self.board[0][col] == 0
+        # Column must be in range and the top cell must be empty
+        return 0 <= col < self.COLS and self.board[0, col] == 0
+
     
     def get_next_open_row(self, col: int) -> Optional[int]:
         """
@@ -35,14 +33,31 @@ class ConnectFour:
     
     def make_move(self, col: int, player: int) -> bool:
         """
-        Attempt to make a move in the specified column
-        Returns True if successful, False if invalid
+        Drop a piece for `player` into column `col`.
+    
+        - Reject if it's not `player`'s turn
+        - Reject if column is invalid or full
+        - Place the piece at the lowest empty row
+        - Toggle `current_player` only after a legal move
         """
-        row = self.get_next_open_row(col)
-        if row is not None:
-            self.board[row][col] = player
-            return True
+        # Enforce turn
+        if player != self.current_player:
+            return False
+    
+        # Enforce legality
+        if not self.is_valid_move(col):
+            return False
+    
+        # Find next open row (from bottom)
+        for row in range(self.ROWS - 1, -1, -1):
+            if self.board[row, col] == 0:
+                self.board[row, col] = player
+                # Toggle turn
+                self.current_player = 2 if self.current_player == 1 else 1
+                return True
+    
         return False
+
     
     def check_winner(self) -> Optional[int]:
         """
@@ -97,3 +112,7 @@ class ConnectFour:
     
     def get_current_player(self) -> int:
         return self.current_player
+
+    def reset(self, starting_player: int = 1) -> None:
+        self.board[:, :] = 0
+        self.current_player = starting_player
