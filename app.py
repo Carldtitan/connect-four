@@ -1,190 +1,112 @@
-# app.py — Streamlit UI with tkinter-like board + falling animation
-import time
+# app.py — Clickable board (no bottom buttons), clean turn logic
 import streamlit as st
+from PIL import Image, ImageDraw
+from streamlit_image_coordinates import streamlit_image_coordinates
 from game import ConnectFour
 from ai import ConnectFourAI
 
 st.set_page_config(page_title="Connect Four", page_icon="🎮", layout="centered")
 
-# ------------------- STYLE -------------------
-BOARD_BLUE = "#1557d5"      # classic board blue
+# ----- Visual constants (same look as your tkinter board) -----
+BOARD_BLUE = "#1557d5"
 HOLE_COLOR = "#ffffff"
 EDGE_COLOR = "#000000"
-RED = "#e11d48"             # red disc
-YELLOW = "#facc15"          # yellow disc
-BG = "#e5e7eb"
+RED       = "#e11d48"
+YELLOW    = "#facc15"
+BG        = "#0f172a"     # page bg is dark; board has its own bg
 
-CELL = 86                   # px for each cell
-PADDING = 14                # padding inside each cell for hole
-STROKE = 3
+CELL    = 86              # px per cell
+PADDING = 14              # hole inset
+STROKE  = 3
+RADIUS  = (CELL // 2) - PADDING
 
-st.markdown("""
-    <style>
-    .legend { color: #6b7280; }
-    .ctrl { margin-top: .25rem }
-    </style>
-""", unsafe_allow_html=True)
+# ----- Draw the whole board as a PIL image -----
+def draw_board_img(board):
+    rows, cols = board.shape
+    w, h = cols * CELL, rows * CELL
+    img = Image.new("RGBA", (w, h), BOARD_BLUE)
+    d = ImageDraw.Draw(img)
 
-
-# ------------------- HELPERS -------------------
-def render_svg(board, falling=None):
-    """
-    Draw the board as an SVG like tkinter:
-    - blue rectangle with circular holes (white)
-    - tokens with black stroke
-    - optional falling=(row, col, player) draws a token overlay
-    """
-    rows = len(board)
-    cols = len(board[0]) if rows else 0
-    width = cols * CELL
-    height = rows * CELL
-
-    def hole_cx(c): return c * CELL + CELL // 2
-    def hole_cy(r): return r * CELL + CELL // 2
-    radius = (CELL // 2) - PADDING
-
-    # Start SVG
-    parts = [
-        f'<svg width="{width}" height="{height}" viewBox="0 0 {width} {height}" '
-        f'xmlns="http://www.w3.org/2000/svg" style="background:{BG};">'
-    ]
-
-    # Board background
-    parts.append(
-        f'<rect x="0" y="0" width="{width}" height="{height}" fill="{BOARD_BLUE}" />'
-    )
-
-    # Holes (drawn as white circles to simulate cut-outs)
+    # holes (white with black stroke)
     for r in range(rows):
         for c in range(cols):
-            parts.append(
-                f'<circle cx="{hole_cx(c)}" cy="{hole_cy(r)}" r="{radius}" '
-                f'fill="{HOLE_COLOR}" stroke="{EDGE_COLOR}" stroke-width="{STROKE}" />'
-            )
+            cx = c * CELL + CELL // 2
+            cy = r * CELL + CELL // 2
+            bbox = [cx - RADIUS, cy - RADIUS, cx + RADIUS, cy + RADIUS]
+            d.ellipse(bbox, fill=HOLE_COLOR, outline=EDGE_COLOR, width=STROKE)
 
-    # Tokens
+    # tokens
     for r in range(rows):
         for c in range(cols):
-            v = board[r][c]
+            v = int(board[r, c])
             if v == 0:
                 continue
-            fill = RED if v == 1 else YELLOW
-            parts.append(
-                f'<circle cx="{hole_cx(c)}" cy="{hole_cy(r)}" r="{radius}" '
-                f'fill="{fill}" stroke="{EDGE_COLOR}" stroke-width="{STROKE}" />'
-            )
+            color = RED if v == 1 else YELLOW
+            cx = c * CELL + CELL // 2
+            cy = r * CELL + CELL // 2
+            bbox = [cx - RADIUS, cy - RADIUS, cx + RADIUS, cy + RADIUS]
+            d.ellipse(bbox, fill=color, outline=EDGE_COLOR, width=STROKE)
 
-    # Falling overlay (drawn last so it appears on top)
-    if falling is not None:
-        fr, fc, p = falling
-        fill = RED if p == 1 else YELLOW
-        parts.append(
-            f'<circle cx="{hole_cx(fc)}" cy="{hole_cy(fr)}" r="{radius}" '
-            f'fill="{fill}" stroke="{EDGE_COLOR}" stroke-width="{STROKE}" />'
-        )
+    return img
 
-    parts.append('</svg>')
-    return "".join(parts)
-
-
-def next_empty_row(board, col):
-    """Return the row index where a token would land in this column, or None if full."""
-    for r in range(len(board) - 1, -1, -1):
-        if board[r][col] == 0:
-            return r
-    return None
-
-
-def animate_drop(container, game, col, player, delay=0.055):
-    """
-    Show a simple falling animation by redrawing the board with an overlay token
-    moving down the target column until the landing row.
-    We only modify the true board state at the end (by calling game.make_move).
-    """
-    target_row = next_empty_row(game.board, col)
-    if target_row is None:
-        return False
-
-    # Start above the board (visual nicely)
-    for r in range(0, target_row + 1):
-        svg = render_svg(game.board, falling=(r, col, player))
-        container.markdown(svg, unsafe_allow_html=True)
-        time.sleep(delay)
-
-    # Commit the real move
-    game.make_move(col, player)
-    container.markdown(render_svg(game.board), unsafe_allow_html=True)
-    return True
-
-
-# ------------------- SESSION -------------------
+# ----- Session bootstrap -----
 if "game" not in st.session_state:
     st.session_state.game = ConnectFour()
 if "ai" not in st.session_state:
     st.session_state.ai = ConnectFourAI(st.session_state.game)
-    st.session_state.ai.set_player_number(2)  # AI is player 2 (Yellow)
+    st.session_state.ai.set_player_number(2)  # AI = player 2 (Yellow)
 
-g = st.session_state.game
+g  = st.session_state.game
 ai = st.session_state.ai
+human = 1 if ai.AI == 2 else 2  # human is the other player
 
 st.title("Connect Four")
 
-# Controls
-c1, c2, c3 = st.columns([1,1,2])
+c1, c2, _ = st.columns([1,1,2])
 with c1:
     ai_starts = st.toggle("AI starts", value=False)
 with c2:
-    if st.button("Restart Game", help="Start a fresh game", use_container_width=True):
+    if st.button("Restart Game", use_container_width=True):
         st.session_state.game = ConnectFour()
-        st.session_state.ai = ConnectFourAI(st.session_state.game)
+        st.session_state.ai   = ConnectFourAI(st.session_state.game)
         if ai_starts:
-            st.session_state.ai.set_player_number(1)
-            # AI opening move with animation
-            board_placeholder = st.empty()
-            board_placeholder.markdown(render_svg(st.session_state.game.board), unsafe_allow_html=True)
+            st.session_state.ai.set_player_number(1)   # AI = Red
+            st.session_state.game.current_player = 1
+            # AI opening move (no animation to keep UX snappy)
             ai_col = st.session_state.ai.get_best_move()
-            animate_drop(board_placeholder, st.session_state.game, ai_col, 1)
+            g = st.session_state.game
+            g.make_move(ai_col, 1)
         else:
-            st.session_state.ai.set_player_number(2)
+            st.session_state.ai.set_player_number(2)   # AI = Yellow
+            st.session_state.game.current_player = 1    # Human starts
         st.rerun()
 
-# Whose turn
+# Status line
 winner = g.check_winner()
 if winner is None and not g.is_board_full():
-    human = 1 if ai.AI == 2 else 2
     turn = "🔴 Human" if g.current_player == human else "🟡 AI"
     st.write(f"**Turn:** {turn}")
 
-# Board placeholder (used for animation)
-board_area = st.empty()
-board_area.markdown(render_svg(g.board), unsafe_allow_html=True)
+# ----- Render board as one image and make it clickable -----
+img = draw_board_img(g.board)
+# IMPORTANT: width=img.width keeps 1:1 pixels so columns map perfectly
+evt = streamlit_image_coordinates(img, width=img.width, key="board-click")
 
-st.divider()
-st.write("Drop a piece:")
-drop = st.columns(g.COLS, gap="small")
+# If the human clicked and it's the human's turn, compute the column and play
+if evt and winner is None and g.current_player == human and not g.is_board_full():
+    x = evt["x"]  # pixel X within the displayed image
+    col = int(x // CELL)
+    if 0 <= col < g.COLS and g.is_valid_move(col):
+        if g.make_move(col, human):
+            # let AI respond immediately if game not over
+            if g.check_winner() is None and not g.is_board_full():
+                ai_col = ai.get_best_move()
+                g.make_move(ai_col, ai.AI)
+            st.rerun()
 
-# ------------------- GAMEPLAY -------------------
+# Footer
 if winner is not None:
-    if ai.AI != winner:
-        st.success("You win! 🎉")
-        st.balloons()
-    else:
-        st.error("AI wins! 🤖")
+    st.success("You win! 🎉") if winner != ai.AI else st.error("AI wins! 🤖")
 elif g.is_board_full():
     st.info("It’s a tie.")
-else:
-    for c in range(g.COLS):
-        with drop[c]:
-            disabled = not g.is_valid_move(c)
-            if st.button(f"↓ {c+1}", key=f"drop-{c}", disabled=disabled):
-                # Human move with falling animation
-                human = 1 if ai.AI == 2 else 2
-                if animate_drop(board_area, g, c, human):
-                    # If game still running, animate AI reply
-                    if g.check_winner() is None and not g.is_board_full():
-                        ai_col = ai.get_best_move()
-                        animate_drop(board_area, g, ai_col, ai.AI)
-                st.rerun()
-
-st.markdown("<p class='legend'>Red = Human, Yellow = AI. Click a column to drop a piece.</p>",
-            unsafe_allow_html=True)
+st.caption("Click a column to drop a piece. Red = Human, Yellow = AI.")
