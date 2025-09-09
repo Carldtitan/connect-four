@@ -116,16 +116,21 @@ def animate_drop(container, game, col, player, delay=0.055):
     container.markdown(render_svg(game.board), unsafe_allow_html=True)
     return True
 
-
 # ------------------- SESSION -------------------
 if "game" not in st.session_state:
     st.session_state.game = ConnectFour()
 if "ai" not in st.session_state:
     st.session_state.ai = ConnectFourAI(st.session_state.game)
-    st.session_state.ai.set_player_number(2)  # AI is player 2 (Yellow)
+
+# Human is ALWAYS Red (1). AI is ALWAYS Yellow (2).
+HUMAN = 1
+AI_PLAYER = 2
+st.session_state.ai.set_player_number(AI_PLAYER)
 
 g = st.session_state.game
 ai = st.session_state.ai
+
+
 
 st.title("Connect Four")
 
@@ -135,25 +140,38 @@ with c1:
     ai_starts = st.toggle("AI starts", value=False)
 with c2:
     if st.button("Restart Game", help="Start a fresh game", use_container_width=True):
+        # reset objects
         st.session_state.game = ConnectFour()
-        st.session_state.ai = ConnectFourAI(st.session_state.game)
+        st.session_state.ai   = ConnectFourAI(st.session_state.game)
+
+        # lock colors again
+        st.session_state.ai.set_player_number(AI_PLAYER)
+
+        # set who goes first (no color swap)
         if ai_starts:
-            st.session_state.ai.set_player_number(1)
+            # AI (Yellow, player 2) starts
+            st.session_state.game.current_player = AI_PLAYER
             # AI opening move with animation
             board_placeholder = st.empty()
-            board_placeholder.markdown(render_svg(st.session_state.game.board), unsafe_allow_html=True)
+            board_placeholder.markdown(
+                render_svg(st.session_state.game.board), unsafe_allow_html=True
+            )
             ai_col = st.session_state.ai.get_best_move()
-            animate_drop(board_placeholder, st.session_state.game, ai_col, 1)
+            animate_drop(board_placeholder, st.session_state.game, ai_col, AI_PLAYER)
+            # make_move toggles turn to Human automatically
         else:
-            st.session_state.ai.set_player_number(2)
+            # Human (Red, player 1) starts
+            st.session_state.game.current_player = HUMAN
+
         st.rerun()
+
 
 # Whose turn
 winner = g.check_winner()
 if winner is None and not g.is_board_full():
-    human = 1 if ai.AI == 2 else 2
-    turn = "🔴 Human" if g.current_player == human else "🟡 AI"
+    turn = "🔴 Human" if g.current_player == HUMAN else "🟡 AI"
     st.write(f"**Turn:** {turn}")
+
 
 # Board placeholder (used for animation)
 board_area = st.empty()
