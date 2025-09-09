@@ -193,16 +193,16 @@ elif g.is_board_full():
 else:
     for c in range(g.COLS):
         with drop[c]:
-            disabled = not g.is_valid_move(c)
+            disabled = (not g.is_valid_move(c)) or (g.current_player != HUMAN)
             if st.button(f"↓ {c+1}", key=f"drop-{c}", disabled=disabled):
-                # Human move with falling animation
-                human = 1 if ai.AI == 2 else 2
-                if animate_drop(board_area, g, c, human):
-                    # If game still running, animate AI reply
+                # Human (Red) move
+                if animate_drop(board_area, g, c, HUMAN):
+                    # AI (Yellow) replies if game not over
                     if g.check_winner() is None and not g.is_board_full():
                         ai_col = ai.get_best_move()
-                        animate_drop(board_area, g, ai_col, ai.AI)
+                        animate_drop(board_area, g, ai_col, AI_PLAYER)
                 st.rerun()
+
 
 st.markdown("<p class='legend'>Red = Human, Yellow = AI. Click a column to drop a piece.</p>",
             unsafe_allow_html=True)
