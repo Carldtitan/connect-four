@@ -236,84 +236,68 @@ class ConnectFourAI:
                 return True
                 
         return False
+    def minimax(self, board: np.ndarray, depth: int, alpha: float, beta: float,
+            maximizing: bool) -> Tuple[Optional[int], float]:
+
+        valid_locations = self.get_valid_locations(board)
     
-    def minimax(self, board: np.ndarray, depth: int, alpha: float, beta: float, 
-                maximizing_player: bool) -> Tuple[int, int]:
-        """
-        Minimax algorithm with alpha-beta pruning
-        Searches game tree to specified depth
-        Returns (column, score) tuple
-        Uses alpha-beta pruning to reduce search space
-        """
-        valid_locations = [col for col in range(self.game.COLS) 
-                         if self.game.is_valid_move(col)]
-        
-        # Check for winning moves first
-        for col in valid_locations:
-            row = self.game.get_next_open_row(col)
-            if row is not None:
-                # Check if AI can win immediately
-                board_copy = board.copy()
-                board_copy[row][col] = self.AI
-                if self.is_winning_move(board_copy, row, col, self.AI):
-                    return col, float('inf')
-        
-        # Then check for blocking moves
-        for col in valid_locations:
-            row = self.game.get_next_open_row(col)
-            if row is not None:
-                board_copy = board.copy()
-                board_copy[row][col] = self.PLAYER
-                if self.is_winning_move(board_copy, row, col, self.PLAYER):
-                    return col, float('inf') - 1  # Slightly less than winning
-        
-        # Continue with regular minimax if no immediate wins/blocks
-        is_terminal = self.game.check_winner() is not None or self.game.is_board_full()
-        if depth == 0 or is_terminal:
-            if is_terminal:
-                winner = self.game.check_winner()
-                if winner == self.AI:
-                    return (None, float('inf'))
-                elif winner == self.PLAYER:
-                    return (None, float('-inf'))
-                else:
-                    return (None, 0)
-            else:
-                return (None, self.score_position(board, self.AI))
-        
-        # Maximizing player (AI)
-        if maximizing_player:
+        # terminal / depth base cases using the simulated board
+        if depth == 0 or self.is_terminal_node(board):
+            if self.winning_move_board(board, self.AI):
+                return (None, float('inf'))
+            if self.winning_move_board(board, self.PLAYER):
+                return (None, float('-inf'))
+            return (None, float(self.score_position(board, self.AI)))
+    
+        # simple move-ordering: center first to improve pruning
+        center = self.game.COLS // 2
+        valid_locations.sort(key=lambda c: abs(center - c))
+    
+        if maximizing:  # AI to move
             value = float('-inf')
-            column = valid_locations[0]
+            best_col = valid_locations[0]
             for col in valid_locations:
-                row = self.game.get_next_open_row(col)
-                board_copy = board.copy()
-                board_copy[row][col] = self.AI
-                new_score = self.minimax(board_copy, depth-1, alpha, beta, False)[1]
-                if new_score > value:
-                    value = new_score
-                    column = col
+                row = self.get_next_row(board, col)
+                if row is None:
+                    continue
+                b2 = board.copy()
+                b2[row, col] = self.AI
+    
+                # avoid blunders that give the opponent an immediate win
+                if self.allows_opponent_win(b2, self.PLAYER):
+                    score = -1e8
+                else:
+                    score = self.minimax(b2, depth - 1, alpha, beta, False)[1]
+    
+                if score > value:
+                    value, best_col = score, col
                 alpha = max(alpha, value)
                 if alpha >= beta:
-                    break  # Beta cutoff
-            return column, value
-        
-        # Minimizing player (Human)
-        else:
+                    break
+            return best_col, value
+    
+        else:  # human to move
             value = float('inf')
-            column = valid_locations[0]
+            best_col = valid_locations[0]
             for col in valid_locations:
-                row = self.game.get_next_open_row(col)
-                board_copy = board.copy()
-                board_copy[row][col] = self.PLAYER
-                new_score = self.minimax(board_copy, depth-1, alpha, beta, True)[1]
-                if new_score < value:
-                    value = new_score
-                    column = col
+                row = self.get_next_row(board, col)
+                if row is None:
+                    continue
+                b2 = board.copy()
+                b2[row, col] = self.PLAYER
+    
+                if self.allows_opponent_win(b2, self.AI):
+                    score = 1e8
+                else:
+                    score = self.minimax(b2, depth - 1, alpha, beta, True)[1]
+    
+                if score < value:
+                    value, best_col = score, col
                 beta = min(beta, value)
                 if alpha >= beta:
-                    break  # Alpha cutoff
-            return column, value
+                    break
+            return best_col, value
+
     
     def get_best_move(self) -> int:
         """
@@ -379,3 +363,36 @@ class ConnectFourAI:
             score -= 80000  # Increased penalty for opponent's threats
 
         return score
+    def get_valid_locations(self, board: np.ndarray):
+        return [c for c in range(self.game.COLS) if board[0, c] == 0]
+    
+    def winning_move_board(self, board: np.ndarray, player: int) -> bool:
+        R, C = self.game.ROWS, self.game.COLS
+        # horizontal
+        for r in range(R):
+            for c in range(C - 3):
+                if np.all(board[r, c:c+4] == player):
+                    return True
+        # vertical
+        for r in range(R - 3):
+            for c in range(C):
+                if np.all(board[r:r+4, c] == player):
+                    return True
+        # diag down-right
+        for r in range(R - 3):
+            for c in range(C - 3):
+                if all(board[r+i, c+i] == player for i in range(4)):
+                    return True
+        # diag up-right
+        for r in range(3, R):
+            for c in range(C - 3):
+                if all(board[r-i, c+i] == player for i in range(4)):
+                    return True
+        return False
+    
+    def is_terminal_node(self, board: np.ndarray) -> bool:
+        return (
+            self.winning_move_board(board, self.AI)
+            or self.winning_move_board(board, self.PLAYER)
+            or len(self.get_valid_locations(board)) == 0
+        )
